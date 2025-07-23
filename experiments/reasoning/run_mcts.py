@@ -9,14 +9,16 @@ It's extracted from the MCTS folder to provide a clean experiment interface.
 import os
 import json
 import argparse
+import glob
+import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
 
 from docetl.mcts import MCTS, Node, ParetoFrontier, AccuracyComparator
 from docetl.reasoning_optimizer.directives import (
-    DEFAULT_MODEL, DEFAULT_OUTPUT_DIR,
-    ChainingDirective, GleaningDirective, ChangeModelDirective, DocSummarizationDirective
+    DEFAULT_MODEL, DEFAULT_OUTPUT_DIR, ALL_DIRECTIVES
 )
+from experiments.reasoning.evaluation.cuad import evaluate_results as cuad_evaluate
 
 def run_mcts_experiment(
     yaml_path: str,
@@ -25,7 +27,9 @@ def run_mcts_experiment(
     experiment_name: str = "mcts_experiment",
     max_iterations: int = 100,
     exploration_weight: float = 1.414,
-    model: str = DEFAULT_MODEL
+    model: str = DEFAULT_MODEL,
+    dataset: str = "cuad",
+    ground_truth_path: str | None = None,
 ):
     """
     Run MCTS optimization experiment with specified parameters.
@@ -61,6 +65,7 @@ def run_mcts_experiment(
     print(f"Exploration Weight (c): {exploration_weight}")
     print(f"Model: {model}")
     print(f"Experiment: {experiment_name}")
+    print(f"Dataset for evaluation: {dataset}")
     print()
     
     # Initialize MCTS
@@ -72,8 +77,8 @@ def run_mcts_experiment(
     # Initialize accuracy comparator
     accuracy_comparator = AccuracyComparator(input_data=sample_input_data, model=model)
     
-    # Set up available directives
-    available_actions = {ChainingDirective(), GleaningDirective(), ChangeModelDirective(), DocSummarizationDirective()}
+    # Use all registered rewrite directives from the central registry
+    available_actions = set(ALL_DIRECTIVES)
     
     # Initialize MCTS
     mcts = MCTS(
@@ -83,7 +88,8 @@ def run_mcts_experiment(
         sample_input=sample_input_data,
         exploration_constant=exploration_weight,
         max_iterations=max_iterations,
-        model=model
+        model=model,
+        output_dir=str(output_path)
     )
     
     print(f"✅ MCTS initialized with root node: {yaml_path}")
@@ -98,7 +104,78 @@ def run_mcts_experiment(
     duration = (end_time - start_time).total_seconds()
     
     print(f"✅ MCTS optimization completed in {duration:.2f} seconds")
-        
+
+    # ------------------------------------------------------------------
+    # Evaluation
+    # ------------------------------------------------------------------
+    eval_results = []
+    if dataset.lower() == "cuad":
+        if ground_truth_path is None:
+            default_gt = Path("experiments/reasoning/data/CUAD-master_clauses.csv")
+            ground_truth_path = str(default_gt)
+
+        print(f"\n🧪 Evaluating extraction JSONs against CUAD ground truth ...")
+
+        # Iterate over executed nodes to evaluate their outputs directly
+        for n in mcts.pareto_frontier.plans:
+            jf = n.result_path
+            if jf is None or not Path(jf).exists():
+                continue
+            try:
+                metrics = cuad_evaluate("docetl_mcts", jf, ground_truth_path)
+                jp = Path(jf).resolve()
+                op_root = output_path.resolve()
+                if hasattr(jp, "is_relative_to") and jp.is_relative_to(op_root):
+                    display_path = str(jp.relative_to(op_root))
+                else:
+                    display_path = jp.name
+
+                eval_results.append({
+                    "file": display_path,
+                    "node_id": n.get_id(),
+                    "precision": metrics["avg_precision"],
+                    "recall": metrics["avg_recall"],
+                    "f1": metrics["avg_f1"],
+                    "cost": n.cost,
+                    "mcts_accuracy": mcts.pareto_frontier.plans_accuracy.get(n),
+                    "on_frontier": n in mcts.pareto_frontier.frontier_plans,
+                    "visits": n.visits,
+                    "value": n.value,
+                 })
+            except Exception as e:
+                print(f"   ⚠️  Evaluation failed for {jf}: {e}")
+
+        if eval_results:
+            eval_out_file = output_path / "evaluation_metrics.json"
+            with open(eval_out_file, "w") as f:
+                json.dump(eval_results, f, indent=2)
+            print(f"📊 Evaluation results written to {eval_out_file}")
+
+            # ------------------------------------------------------------------
+            # Plot F1 vs Cost scatter
+            # ------------------------------------------------------------------
+            try:
+                costs = [row["cost"] for row in eval_results]
+                f1s = [row["f1"] for row in eval_results]
+                colors = ["blue" if row["on_frontier"] else "grey" for row in eval_results]
+
+                plt.figure(figsize=(8,6))
+                plt.scatter(costs, f1s, c=colors)
+                for row in eval_results:
+                    label = f"{row['node_id']} ({row['mcts_accuracy']:.2f})"
+                    plt.annotate(label, (row["cost"], row["f1"]), textcoords="offset points", xytext=(4,4), fontsize=8)
+
+                plt.xlabel("Cost ($)")
+                plt.ylabel("F1 Score")
+                plt.title("Cost vs F1 for all plans")
+                plt.grid(True, linestyle="--", alpha=0.5)
+                plot_path = output_path / "cost_vs_f1.png"
+                plt.savefig(plot_path, dpi=150, bbox_inches="tight")
+                plt.close()
+                print(f"📈 Scatter plot saved to: {plot_path}")
+            except Exception as e:
+                print(f"⚠️  Failed to create scatter plot: {e}")
+    
     # Save results
     results = {
         "experiment_name": experiment_name,
@@ -108,54 +185,25 @@ def run_mcts_experiment(
         "exploration_weight": exploration_weight,
         "data_dir": data_dir,
         "output_dir": str(output_path),
+        "dataset": dataset,
+        "ground_truth": ground_truth_path,
         "start_time": start_time.isoformat(),
         "end_time": end_time.isoformat(),
         "duration_seconds": duration,
         "num_best_nodes": len(best_nodes) if best_nodes else 0,
         "total_nodes_explored": len(mcts.all_nodes) if hasattr(mcts, 'all_nodes') else 0,
     }
-    
-    # Save best configurations
-    if best_nodes:
-        print(f"\n📊 Found {len(best_nodes)} optimal configurations:")
-        
-        best_configs = []
-        for i, node in enumerate(best_nodes):
-            config_file = output_path / f"best_config_{i+1}.yaml"
-            
-            # Save the node's YAML configuration
-            if hasattr(node, 'yaml_content'):
-                with open(config_file, 'w') as f:
-                    f.write(node.yaml_content)
-            elif hasattr(node, 'yaml_file_path') and os.path.exists(node.yaml_file_path):
-                import shutil
-                shutil.copy2(node.yaml_file_path, config_file)
-            
-            best_configs.append({
-                "config_id": i + 1,
-                "config_file": str(config_file),
-                "value": getattr(node, 'value', 0),
-                "visits": getattr(node, 'visits', 0),
-                "accuracy": getattr(node, 'accuracy', None),
-                "cost": getattr(node, 'cost', None)
-            })
-            
-            print(f"   Config {i+1}: value={getattr(node, 'value', 0):.3f}, "
-                    f"visits={getattr(node, 'visits', 0)}, saved to {config_file}")
-        
-        results["best_configurations"] = best_configs
-    else:
-        print("⚠️  No optimal configurations found")
-        results["best_configurations"] = []
+    if eval_results:
+        results["evaluation_file"] = str(eval_out_file)
     
     # Save Pareto frontier if available
-    if hasattr(mcts, 'pareto_frontier') and mcts.pareto_frontier.solutions:
+    if hasattr(mcts, 'pareto_frontier') and mcts.pareto_frontier.frontier_plans:
         pareto_file = output_path / "pareto_frontier.json"
         pareto_data = []
         
-        for solution in mcts.pareto_frontier.solutions:
+        for solution in mcts.pareto_frontier.frontier_plans:
             pareto_data.append({
-                "accuracy": getattr(solution, 'accuracy', None),
+                "accuracy": mcts.pareto_frontier.plans_accuracy.get(solution, None),
                 "cost": getattr(solution, 'cost', None),
                 "value": getattr(solution, 'value', 0),
                 "config_path": getattr(solution, 'yaml_file_path', None)
@@ -211,6 +259,8 @@ Examples:
                        help="UCB exploration parameter c (default: 1.414)")
     parser.add_argument("--model", type=str, default=DEFAULT_MODEL, 
                        help=f"LLM model to use (default: {DEFAULT_MODEL})")
+    parser.add_argument("--dataset", type=str, default="cuad", help="Dataset name for evaluation (default: cuad)")
+    parser.add_argument("--ground_truth", type=str, help="Path to ground-truth file (if not default)")
     
     args = parser.parse_args()
     
@@ -221,7 +271,9 @@ Examples:
         experiment_name=args.experiment_name,
         max_iterations=args.max_iterations,
         exploration_weight=args.exploration_weight,
-        model=args.model
+        model=args.model,
+        dataset=args.dataset,
+        ground_truth_path=args.ground_truth,
     )
     
     print("\n🎉 MCTS experiment completed successfully!")

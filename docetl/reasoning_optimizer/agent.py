@@ -6,7 +6,6 @@ from typing import Dict
 
 import litellm
 import yaml
-from op_descriptions import *
 from pydantic import BaseModel
 
 from docetl.reasoning_optimizer.directives import (
@@ -15,6 +14,8 @@ from docetl.reasoning_optimizer.directives import (
 )
 from docetl.reasoning_optimizer.load_data import load_input_doc
 from docetl.utils import load_config
+
+from .op_descriptions import *
 
 # argparse removed - use experiments/reasoning/run_baseline.py for CLI
 
@@ -75,6 +76,7 @@ def get_openai_response(
     max_tpm=5000000,
     message_history=[],
     curr_plan_output="",
+    prev_plan_cost: float = 0.0,
     iteration=1,
 ):
     """
@@ -112,6 +114,7 @@ def get_openai_response(
         {get_all_directive_strings()}\n
 
         Input document schema with token statistics: {input_schema} \n
+        Cost of previous plan execution: ${prev_plan_cost:.4f} \n
         Input data sample: {json.dumps(input_data_sample, indent=2)[:5000]} \n
         The original query in YAML format using our operations: {input_query} \n
         Sample of the result from executing the original query: {json.dumps(curr_plan_output, indent=2)} \n
@@ -123,6 +126,7 @@ def get_openai_response(
          Rewrite directives:
         {get_all_directive_strings()}\n
 
+        Cost of previous plan execution: ${prev_plan_cost:.4f} \n
         Input data sample: {json.dumps(input_data_sample, indent=2)[:5000]} \n
         The original query in YAML format using our operations: {input_query} \n
         Sample of the result from executing the previously rewritten query: {json.dumps(curr_plan_output, indent=2)} \n
@@ -152,7 +156,7 @@ def get_openai_response(
         api_base=os.environ.get("AZURE_API_BASE"),
         api_version=os.environ.get("AZURE_API_VERSION"),
         azure=True,
-        reasoning_effort="high",
+        # reasoning_effort="high",  # Not supported by Azure
         response_format=ResponseFormat,
     )
     # response = litellm.completion(
@@ -284,7 +288,14 @@ def load_message_history(filepath):
 
 
 def run_single_iteration(
-    yaml_path, model, max_tpm, message_history, iteration_num, orig_output_sample
+    yaml_path,
+    model,
+    max_tpm,
+    message_history,
+    iteration_num,
+    orig_output_sample,
+    prev_plan_cost: float,
+    output_dir=None,
 ):
     """
     Run a single iteration of the optimization process.
@@ -323,6 +334,7 @@ def run_single_iteration(
         max_tpm=max_tpm,
         message_history=message_history,
         curr_plan_output=orig_output_sample,
+        prev_plan_cost=prev_plan_cost,
         iteration=iteration_num,
     )
     print("Agent:", reply)
@@ -359,7 +371,6 @@ def run_single_iteration(
 
     output_file_path = os.path.join(
         data_dir,
-        "agent_optimized_plan/group10",
         f"CUAD-map_opt_iter_{iteration_num}.yaml",
     )
 
@@ -383,7 +394,54 @@ def run_single_iteration(
 
     print(f"Modified YAML saved to: {output_file_path}")
 
-    return output_file_path, message_history
+    # Execute the pipeline to get cost and sample outputs for next iteration
+    total_cost = 0.0
+    try:
+        from dotenv import load_dotenv
+
+        from docetl.runner import DSLRunner
+
+        # Update output path if output_dir is provided
+        if output_dir:
+            json_output_path = os.path.join(
+                output_dir, f"iteration_{iteration_num}_results.json"
+            )
+            orig_config["pipeline"]["output"]["path"] = json_output_path
+
+            # Save updated YAML with new output path
+            with open(output_file_path, "w") as file:
+                yaml.dump(
+                    orig_config,
+                    file,
+                    default_flow_style=False,
+                    allow_unicode=True,
+                    sort_keys=False,
+                )
+
+        # Load environment
+        cwd = os.getcwd()
+        env_file = os.path.join(cwd, ".env")
+        if os.path.exists(env_file):
+            load_dotenv(env_file)
+
+        print(f"🔄 Executing pipeline to get cost and sample outputs...")
+        runner = DSLRunner.from_yaml(output_file_path)
+        runner.load()
+
+        if runner.last_op_container:
+            result_data, _, _ = runner.last_op_container.next()
+            runner.save(result_data)
+            total_cost = runner.total_cost
+            print(f"✅ Pipeline executed successfully, cost: ${total_cost:.4f}")
+        else:
+            print(f"⚠️  No results from pipeline execution")
+
+        runner.reset_env()
+
+    except Exception as e:
+        print(f"❌ Pipeline execution failed: {e}")
+
+    return output_file_path, message_history, total_cost
 
 
 # agent.py is now a pure module - no experiment code

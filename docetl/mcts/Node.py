@@ -38,6 +38,15 @@ class Node:
         """
         self.yaml_file_path = yaml_file_path
         self.parsed_yaml = self._load_yaml()
+
+        # Where the JSON results will be written (if defined in the YAML). This is
+        # useful later for evaluation without having to guess filenames.
+        try:
+            self.result_path: str | None = (
+                self.parsed_yaml.get("pipeline", {}).get("output", {}).get("path")
+            )
+        except Exception:
+            self.result_path = None
         self.on_frontier = False
         self.used_actions_acc = {}
         self.used_actions_cost = {}
@@ -61,8 +70,6 @@ class Node:
         Node._id_counter += 1
 
         print("NODE ID: ", self.id)
-        print("USED ACTIONS ACC: ", self.used_actions_acc)
-        print("USED ACTIONS COST: ", self.used_actions_cost)
 
     def execute_plan(self, max_threads: Optional[int] = None) -> tuple[float, list]:
         """

@@ -1,5 +1,6 @@
 import json
 import os
+import warnings
 from copy import deepcopy
 from typing import Dict, List, Type
 
@@ -267,10 +268,15 @@ class ChangeModelDirective(Directive):
         """
         Instantiate the directive for a list of operators.
         """
-        # Assert that there is only one target op
-        assert (
-            len(target_ops) == 1
-        ), "There must be exactly one target op to instantiate this chaining directive"
+        if len(target_ops) == 0:
+            raise ValueError(
+                "No target ops supplied for ChangeModelDirective.instantiate"
+            )
+        if len(target_ops) > 1:
+            warnings.warn(
+                f"Multiple target_ops supplied ({target_ops}); using the first one: {target_ops[0]}",
+                UserWarning,
+            )
         target_op_config = [op for op in operators if op["name"] == target_ops[0]][0]
 
         # Instantiate the directive

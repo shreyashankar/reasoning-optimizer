@@ -45,6 +45,7 @@ class MCTS:
         max_time: Optional[float] = 600.0,
         expansion_count: int = 4,
         model="gpt-4.1",
+        output_dir: Optional[str] = None,
     ):
         """
         Initialize the MCTS algorithm with Pareto frontier integration.
@@ -67,6 +68,13 @@ class MCTS:
         self.expansion_count = expansion_count
         self.start_time = None
         self.model = model
+        # Where all generated pipeline YAMLs and their JSON outputs will be stored.
+        # If not provided, default to the directory of the root YAML file.
+        self.output_dir = (
+            os.path.abspath(output_dir)
+            if output_dir is not None
+            else os.path.dirname(os.path.abspath(root_yaml_path))
+        )
         self.sample_input = sample_input
         # Initialize Pareto frontier
         self.pareto_frontier = ParetoFrontier(accuracy_comparator)
@@ -454,7 +462,7 @@ class MCTS:
             global_default_model=orig_default_model,
             operators=node.parsed_yaml["operations"],
             target_ops=target_op_list,
-            agent_llm=self.model
+            agent_llm=self.model,
         )
         if new_ops_list is None:
             raise RuntimeError(
@@ -469,11 +477,20 @@ class MCTS:
         )
 
         self.fix_models_azure(new_parsed_yaml)
-        base_path = node.yaml_file_path.removesuffix(".yaml")
-        new_yaml_path = f"{base_path}_{len(node.children)+1}_{optimize_goal}.yaml"
-        new_parsed_yaml["pipeline"]["output"][
-            "path"
-        ] = f"{base_path}_{len(node.children)+1}.json"
+        # Build file names inside the designated output directory so that pipelines
+        # and their execution results do not clutter the original `pipelines/` folder.
+        os.makedirs(self.output_dir, exist_ok=True)
+
+        base_name = os.path.basename(node.yaml_file_path).removesuffix(".yaml")
+
+        new_yaml_path = os.path.join(
+            self.output_dir,
+            f"{base_name}_{len(node.children)+1}_{optimize_goal}.yaml",
+        )
+
+        new_parsed_yaml["pipeline"]["output"]["path"] = os.path.join(
+            self.output_dir, f"{base_name}_{len(node.children)+1}.json"
+        )
 
         with open(new_yaml_path, "w") as file:
             yaml.dump(
