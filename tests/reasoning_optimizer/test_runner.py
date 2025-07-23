@@ -14,6 +14,7 @@ from docetl.reasoning_optimizer.directives import (
     GleaningDirective, 
     ChangeModelDirective,
     DocSummarizationDirective,
+    IsolatingSubtasksDirective,
     TestResult
 )
 
@@ -135,9 +136,8 @@ def run_specific_directive_test(directive_name: str, agent_llm: str = "gpt-4o-mi
         "chaining": ChainingDirective(),
         "gleaning": GleaningDirective(),
         "change_model": ChangeModelDirective(),
-        "change model": ChangeModelDirective(),
         "doc_summarization": DocSummarizationDirective(),
-        "doc summarization": DocSummarizationDirective()
+        "isolating_subtasks": IsolatingSubtasksDirective()
     }
     
     if directive_name.lower() not in directive_map:

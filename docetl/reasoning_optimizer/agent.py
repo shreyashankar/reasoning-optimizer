@@ -63,6 +63,37 @@ def count_tokens(messages):
     return max(1, total_chars // 4)
 
 
+# ------------------------------------------------------------------
+# 🔒 Context-window safety helpers
+# ------------------------------------------------------------------
+# Maximum number of tokens we will allow in the prompt we send to the model.
+# The Azure GPT-4.1 family allows ~1 M tokens, so we keep a ~20 % buffer.
+MAX_CONTEXT_TOKENS = 800_000
+
+
+def _trim_history(history: list, keep_system_first: bool = True) -> list:
+    """Trim the conversation history in-place so its estimated token count
+    (via ``count_tokens``) does not exceed ``MAX_CONTEXT_TOKENS``.
+
+    We always keep the very first system message so the assistant retains the
+    global instructions. After that we drop the oldest messages until the
+    budget is satisfied. Returns the trimmed history list.
+    """
+
+    # Determine starting index to preserve the initial system message if present
+    start_idx = (
+        1
+        if (keep_system_first and history and history[0].get("role") == "system")
+        else 0
+    )
+
+    # Drop oldest messages (just after the preserved block) until within limit
+    while len(history) > start_idx + 1 and count_tokens(history) > MAX_CONTEXT_TOKENS:
+        history.pop(start_idx)
+
+    return history
+
+
 class ResponseFormat(BaseModel):
     directive: str
     operators: List[str]
@@ -141,6 +172,10 @@ def get_openai_response(
             {"role": "user", "content": user_message},
         ]
     )
+
+    # Trim the history to prevent context window overflow before sending to the model
+    message_history = _trim_history(message_history)
+
     messages = message_history
 
     # Enforce rate limit for the specified model

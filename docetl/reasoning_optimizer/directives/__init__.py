@@ -13,13 +13,15 @@ from .chaining import ChainingDirective
 from .gleaning import GleaningDirective
 from .change_model import ChangeModelDirective
 from .doc_summarization import DocSummarizationDirective
+from .isolating_subtasks import IsolatingSubtasksDirective
 
 # Registry of all available directives
 ALL_DIRECTIVES = [
     ChainingDirective(),
     GleaningDirective(), 
     ChangeModelDirective(),
-    DocSummarizationDirective()
+    DocSummarizationDirective(),
+    IsolatingSubtasksDirective()
 ]
 
 # Create a mapping from directive names to directive instances
@@ -88,6 +90,7 @@ __all__ = [
     "GleaningDirective",
     "ChangeModelDirective",
     "DocSummarizationDirective",
+    "IsolatingSubtasksDirective",
     "ALL_DIRECTIVES",
     "DIRECTIVE_REGISTRY", 
     "get_all_directive_strings",

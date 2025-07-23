@@ -335,6 +335,8 @@ target_operator["model"] = rewrite.change_model_config.model
 
 ## Testing Your Directive
 
+### Individual Directive Testing
+
 Test your directive by running its test cases:
 
 ```python
@@ -348,7 +350,21 @@ for result in test_results:
     print(f"Reason: {result.reason}")
 ```
 
-Integration testing can be done via `experiments/reasoning/run_mcts.py`.
+### Command Line Testing
+
+Run directive instantiation tests from the command line:
+
+```bash
+# Test a specific directive
+python experiments/reasoning/run_tests.py --directive=isolating_subtasks
+
+# Test all directive instantiation tests
+python experiments/reasoning/run_tests.py
+```
+
+### Integration Testing
+
+Full pipeline integration testing can be done via `experiments/reasoning/run_mcts.py`.
 
 ## Common Patterns
 

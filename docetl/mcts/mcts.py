@@ -441,6 +441,10 @@ class MCTS:
             directive_name = parsed.get("directive")
             target_op_list = parsed.get("operators")
             print(f"Directive: {directive_name}, Target ops: {target_op_list}")
+
+            # Add reply to the message history
+            messages.append({"role": "assistant", "content": reply})
+
         except Exception as e:
             print(f"Failed to parse agent response: {e}")
 
@@ -463,6 +467,7 @@ class MCTS:
             operators=node.parsed_yaml["operations"],
             target_ops=target_op_list,
             agent_llm=self.model,
+            message_history=messages,
         )
         if new_ops_list is None:
             raise RuntimeError(
