@@ -227,7 +227,7 @@ class ParetoFrontier:
         plt.grid(True, linestyle="--", alpha=0.5)
         plt.legend()
         plt.tight_layout()
-        plt.show()
+        # plt.show()
 
     # def calculate_plan_metrics(self, node: Node) -> Dict[str, float]:
     #     """

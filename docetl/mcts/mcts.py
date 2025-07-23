@@ -454,8 +454,7 @@ class MCTS:
             global_default_model=orig_default_model,
             operators=node.parsed_yaml["operations"],
             target_ops=target_op_list,
-            agent_llm=self.model,
-            optimize_goal=optimize_goal,
+            agent_llm=self.model
         )
         if new_ops_list is None:
             raise RuntimeError(

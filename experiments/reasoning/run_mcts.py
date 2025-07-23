@@ -15,7 +15,7 @@ from datetime import datetime
 from docetl.mcts import MCTS, Node, ParetoFrontier, AccuracyComparator
 from docetl.reasoning_optimizer.directives import (
     DEFAULT_MODEL, DEFAULT_OUTPUT_DIR,
-    ChainingDirective, GleaningDirective, ChangeModelDirective
+    ChainingDirective, GleaningDirective, ChangeModelDirective, DocSummarizationDirective
 )
 
 def run_mcts_experiment(
@@ -73,7 +73,7 @@ def run_mcts_experiment(
     accuracy_comparator = AccuracyComparator(input_data=sample_input_data, model=model)
     
     # Set up available directives
-    available_actions = {ChainingDirective(), GleaningDirective(), ChangeModelDirective()}
+    available_actions = {ChainingDirective(), GleaningDirective(), ChangeModelDirective(), DocSummarizationDirective()}
     
     # Initialize MCTS
     mcts = MCTS(

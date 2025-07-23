@@ -258,6 +258,7 @@ class ChainingDirective(Directive):
         operators: List[Dict],
         target_ops: List[str],
         agent_llm: str,
+        global_default_model: str = None,
         message_history: list = [],
     ) -> tuple:
         """
