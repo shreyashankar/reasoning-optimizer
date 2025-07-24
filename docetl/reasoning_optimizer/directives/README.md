@@ -276,6 +276,46 @@ ALL_DIRECTIVES = [
 ]
 ```
 
+### 5. Update Test Runner
+
+Add your directive to `tests/reasoning_optimizer/test_runner.py` in two places:
+
+1. **Import section**:
+```python
+from docetl.reasoning_optimizer.directives import (
+    ChainingDirective,
+    GleaningDirective,
+    ChangeModelDirective,
+    DocSummarizationDirective,
+    IsolatingSubtasksDirective,
+    MyDirective,  # Add your directive here
+    TestResult
+)
+```
+
+2. **Both directive lists**:
+```python
+# In run_all_directive_tests function
+directives = [
+    ChainingDirective(),
+    GleaningDirective(),
+    ChangeModelDirective(),
+    DocSummarizationDirective(),
+    IsolatingSubtasksDirective(),
+    MyDirective()  # Add your directive here
+]
+
+# In run_specific_directive_test function
+directive_map = {
+    "chaining": ChainingDirective(),
+    "gleaning": GleaningDirective(),
+    "change_model": ChangeModelDirective(),
+    "doc_summarization": DocSummarizationDirective(),
+    "isolating_subtasks": IsolatingSubtasksDirective(),
+    "my_directive": MyDirective()  # Add your directive here
+}
+```
+
 ## Real Examples of Instantiate Schemas
 
 ### Gleaning Directive

@@ -1,5 +1,5 @@
 import re
-from typing import List
+from typing import Dict, List
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -327,3 +327,112 @@ class IsolatingSubtasksInstantiateSchema(BaseModel):
         ...,
         description="The isolating subtasks configuration to apply to the target operation.",
     )
+
+
+class DocCompressionConfig(BaseModel):
+    """
+    Configuration for document compression using Extract operation.
+
+    Attributes:
+        name (str): The name of the Extract compression operator.
+        document_key (str): The key in the input document that contains long content to be compressed.
+        prompt (str): Plain text instructions for what to extract (NOT a Jinja template).
+        model (str): The model to use for extraction.
+    """
+
+    name: str = Field(..., description="The name of the Extract compression operator")
+    document_key: str = Field(
+        ...,
+        description="The key in the input document that contains long content to be compressed",
+    )
+    prompt: str = Field(
+        ...,
+        description="Plain text instructions for what to extract from the document. NOT a Jinja template - the Extract operator will automatically assemble the document content.",
+    )
+    model: str = Field(
+        default="gpt-4o-mini", description="The model to use for extraction."
+    )
+
+
+class DocCompressionInstantiateSchema(BaseModel):
+    """
+    Schema for document compression operations in a data processing pipeline.
+    Inserts an Extract operator before the target operation to compress long documents.
+    """
+
+    doc_compression_config: DocCompressionConfig = Field(
+        ...,
+        description="The document compression configuration to apply before the target operation.",
+    )
+
+
+class DeterministicDocCompressionConfig(BaseModel):
+    """
+    Configuration for deterministic document compression using Code Map operation.
+
+    Attributes:
+        name (str): The name of the Code Map compression operator.
+        code (str): Python code with a 'code_map' function that takes input_doc and returns a dictionary with compressed document field(s).
+    """
+
+    name: str = Field(..., description="The name of the Code Map compression operator")
+    code: str = Field(
+        ...,
+        description="Python code defining a 'code_map' function that takes input_doc and returns a dictionary with compressed document field(s). Must include all necessary imports within the function.",
+    )
+
+    @field_validator("code")
+    @classmethod
+    def check_code_has_function(cls, v: str) -> str:
+        if "def code_map(" not in v:
+            raise ValueError(
+                "Code must define a function named 'code_map' that takes input_doc as parameter"
+            )
+        if "return {" not in v and "return dict(" not in v:
+            raise ValueError("Code must return a dictionary")
+        return v
+
+    def validate_code_returns_target_keys(self, target_ops_configs: List[Dict]) -> None:
+        """
+        Validates that the code returns dictionary keys that match document fields referenced in target operations.
+        """
+        import re
+
+        # Extract all {{ input.key }} references from target operation prompts
+        referenced_keys = set()
+        for op_config in target_ops_configs:
+            prompt = op_config.get("prompt", "")
+            # Find all {{ input.key }} patterns
+            matches = re.findall(r"\{\{\s*input\.([^}\s]+)\s*\}\}", prompt)
+            referenced_keys.update(matches)
+
+        if not referenced_keys:
+            raise ValueError("No input document keys found in target operation prompts")
+
+        # Check if the code appears to return the referenced keys
+        # This is a basic check - we look for the keys in return statements
+        for key in referenced_keys:
+            if f"'{key}'" not in self.code and f'"{key}"' not in self.code:
+                raise ValueError(
+                    f"Code must return dictionary key '{key}' which is referenced in target operation prompts as '{{{{ input.{key} }}}}'"
+                )
+
+
+class DeterministicDocCompressionInstantiateSchema(BaseModel):
+    """
+    Schema for deterministic document compression operations in a data processing pipeline.
+    Inserts a Code Map operator before the target operation to compress long documents using deterministic logic.
+    """
+
+    deterministic_doc_compression_config: DeterministicDocCompressionConfig = Field(
+        ...,
+        description="The deterministic document compression configuration to apply before the target operation.",
+    )
+
+    def validate_against_target_ops(self, target_ops_configs: List[Dict]) -> None:
+        """
+        Validates that the configuration is appropriate for the target operations.
+        """
+        self.deterministic_doc_compression_config.validate_code_returns_target_keys(
+            target_ops_configs
+        )
