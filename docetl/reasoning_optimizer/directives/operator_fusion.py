@@ -219,28 +219,47 @@ class OperatorFusionDirective(Directive):
         op2_idx = next(i for i, op in enumerate(ops_list) if op["name"] == op2_name)
         op1, op2 = ops_list[op1_idx], ops_list[op2_idx]
 
-        # Create fused operation based on the second operation's type
-        fused_op = deepcopy(op2)
-        fused_op["name"] = f"fused_{op1_name}_{op2_name}"
-        fused_op["prompt"] = rewrite.fused_prompt
-        fused_op["model"] = rewrite.model
+        # Determine fused operation type and schema based on the combination
+        op1_type, op2_type = op1.get("type"), op2.get("type")
 
-        # Add litellm_completion_kwargs if it's a map, filter, or reduce operation
-        if fused_op.get("type") in ["map", "filter", "reduce"]:
-            fused_op["litellm_completion_kwargs"] = {"temperature": 0}
+        # Create base fused operation
+        fused_op = {
+            "name": f"fused_{op1_name}_{op2_name}",
+            "prompt": rewrite.fused_prompt,
+            "model": rewrite.model,
+            "litellm_completion_kwargs": {"temperature": 0},
+        }
 
-        # Merge output schemas
-        if (
-            "output" in op1
-            and "schema" in op1["output"]
-            and "output" in op2
-            and "schema" in op2["output"]
+        # Determine type, schema, and code_filter need based on combination
+        if op1_type == "map" and op2_type == "map":
+            # map + map => fuse into one map
+            fused_op["type"] = "map"
+            fused_op["output"] = {
+                "schema": {**op1["output"]["schema"], **op2["output"]["schema"]}
+            }
+            needs_code_filter = False
+
+        elif (op1_type == "map" and op2_type == "filter") or (
+            op1_type == "filter" and op2_type == "map"
         ):
-            fused_schema = {**op1["output"]["schema"], **op2["output"]["schema"]}
-            fused_op["output"]["schema"] = fused_schema
+            # map + filter OR filter + map => fuse into map (with union of schemas) + code filter
+            fused_op["type"] = "map"
+            fused_op["output"] = {
+                "schema": {**op1["output"]["schema"], **op2["output"]["schema"]}
+            }
+            needs_code_filter = True
 
-        # Check if we need to add code_filter
-        needs_code_filter = op1.get("type") == "filter" or op2.get("type") == "filter"
+        elif op1_type == "filter" and op2_type == "filter":
+            # filter + filter => fuse into one filter with bool output
+            fused_op["type"] = "filter"
+            fused_op["output"] = {"schema": {"_bool": "bool"}}
+            needs_code_filter = False
+
+        elif op1_type == "map" and op2_type == "reduce":
+            # map + reduce => fuse into reduce
+            fused_op["type"] = "reduce"
+            fused_op["output"] = deepcopy(op2["output"])
+            needs_code_filter = False
 
         # Replace the original operations
         if op1_idx < op2_idx:
@@ -255,19 +274,9 @@ class OperatorFusionDirective(Directive):
 
         # Add code_filter if needed
         if needs_code_filter:
-            # Find the filter field name (assume it follows standard naming)
-            filter_field = "should_keep"  # Default filter field name
-
-            # Try to infer filter field from original filter operation
+            # Get the filter field name from the filter operation
             filter_op = op1 if op1.get("type") == "filter" else op2
-            if (
-                filter_op.get("type") == "filter"
-                and "output" in filter_op
-                and "schema" in filter_op["output"]
-            ):
-                filter_fields = list(filter_op["output"]["schema"].keys())
-                if filter_fields:
-                    filter_field = filter_fields[0]  # Use first boolean field
+            filter_field = list(filter_op["output"]["schema"].keys())[0]
 
             code_filter_op = {
                 "name": f"filter_{fused_op['name']}",
