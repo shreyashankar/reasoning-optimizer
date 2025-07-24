@@ -38,6 +38,7 @@ As an AI agent, I can guide you through creating new rewrite directives step-by-
   - Schema classes in `instantiate_schemas.py`
   - Directive class with all required methods
   - Registration in `__init__.py`
+  - Apply tests in `tests/reasoning_optimizer/test_directive_apply.py`
 - **What you confirm**: Final approval before implementation
 
 ## Existing Directive Patterns
@@ -61,9 +62,16 @@ As an AI agent, I can guide you through creating new rewrite directives step-by-
 - `op_descriptions.py`: Operation type descriptions for the agent
 
 ## Testing Commands
+
+### Instantiation Tests
 - Single directive: `python experiments/reasoning/run_tests.py --directive=directive_name`
 - All directives: `python experiments/reasoning/run_tests.py`
-- Full MCTS: `python experiments/reasoning/run_mcts.py`
+
+### Apply Tests
+- All directive apply methods: `python tests/reasoning_optimizer/test_directive_apply.py`
+
+### Full MCTS
+- Complete optimization: `python experiments/reasoning/run_mcts.py`
 
 ## Workflow for New Directive
 1. Describe desired transformation → I analyze and propose approach

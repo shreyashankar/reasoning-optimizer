@@ -37,6 +37,27 @@ python experiments/reasoning/run_mcts.py \
   --model gpt-4.1
 ```
 
+## Testing
+
+### Directive Tests
+
+Run instantiation tests for all directives:
+```bash
+python experiments/reasoning/run_tests.py
+```
+
+Run instantiation tests for a specific directive:
+```bash
+python experiments/reasoning/run_tests.py --directive=chaining
+```
+
+### Apply Tests
+
+Run apply tests to ensure directive `apply()` methods don't crash:
+```bash
+python tests/reasoning_optimizer/test_directive_apply.py
+```
+
 ## Output
 
 Results are saved to `outputs/{experiment_name}/` containing:
