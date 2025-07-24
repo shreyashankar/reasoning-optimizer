@@ -11,21 +11,25 @@ from .base import (
 )
 from .chaining import ChainingDirective
 from .gleaning import GleaningDirective
+from .reduce_gleaning import ReduceGleaningDirective
 from .change_model import ChangeModelDirective
 from .doc_summarization import DocSummarizationDirective
 from .isolating_subtasks import IsolatingSubtasksDirective
 from .doc_compression import DocCompressionDirective
 from .deterministic_doc_compression import DeterministicDocCompressionDirective
+from .operator_fusion import OperatorFusionDirective
 
 # Registry of all available directives
 ALL_DIRECTIVES = [
     ChainingDirective(),
     GleaningDirective(), 
+    ReduceGleaningDirective(),
     ChangeModelDirective(),
     DocSummarizationDirective(),
     IsolatingSubtasksDirective(),
     DocCompressionDirective(),
-    DeterministicDocCompressionDirective()
+    DeterministicDocCompressionDirective(),
+    OperatorFusionDirective()
 ]
 
 # Create a mapping from directive names to directive instances
@@ -92,11 +96,13 @@ __all__ = [
     "DEFAULT_OUTPUT_DIR",
     "ChainingDirective",
     "GleaningDirective",
+    "ReduceGleaningDirective",
     "ChangeModelDirective",
     "DocSummarizationDirective",
     "IsolatingSubtasksDirective",
     "DocCompressionDirective",
     "DeterministicDocCompressionDirective",
+    "OperatorFusionDirective",
     "ALL_DIRECTIVES",
     "DIRECTIVE_REGISTRY", 
     "get_all_directive_strings",

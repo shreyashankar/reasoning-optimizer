@@ -48,9 +48,9 @@ class DeterministicDocCompressionDirective(Directive):
               deadlines: "list[str]"
 
         Example InstantiateSchema (what the agent should output):
-        DeterministicDocCompressionConfig(
-            name="extract_compliance_sections",
-            code='''
+        {
+        "name": "extract_compliance_sections",
+        "code": '''
 def code_map(input_doc):
     import re
 
@@ -106,7 +106,7 @@ def code_map(input_doc):
         'legal_document': compressed_text
     }
             '''
-        )
+        }
         """
     )
 
@@ -212,7 +212,7 @@ def code_map(input_doc):
             f"Target Operations:\n"
             f"{ops_str}\n\n"
             f"Directive: {self.name}\n"
-            f"Your task is to instantiate this directive by generating a DeterministicDocCompressionConfig "
+            f"Your task is to instantiate this directive by specifying a Code Map operation "
             f"that specifies how to compress the input document using deterministic logic.\n\n"
             f"The directive will insert a Code Map operation that:\n"
             f"1. Takes document field(s) from the input\n"
@@ -237,7 +237,7 @@ def code_map(input_doc):
             f"of content patterns to look for.\n\n"
             f"Example:\n"
             f"{self.example}\n\n"
-            f"Please output only the InstantiateSchema (DeterministicDocCompressionConfig object) "
+            f"Please output only the DeterministicDocCompressionInstantiateSchema as JSON "
             f"that specifies how to apply this directive to the target operations."
         )
 
@@ -274,15 +274,7 @@ def code_map(input_doc):
 
             try:
                 parsed_res = json.loads(resp.choices[0].message.content)
-                if "deterministic_doc_compression_config" not in parsed_res:
-                    raise ValueError(
-                        "Response missing required key 'deterministic_doc_compression_config'"
-                    )
-
-                config = parsed_res["deterministic_doc_compression_config"]
-                schema = DeterministicDocCompressionInstantiateSchema(
-                    deterministic_doc_compression_config=config
-                )
+                schema = DeterministicDocCompressionInstantiateSchema(**parsed_res)
 
                 # Validate against target operations
                 schema.validate_against_target_ops(target_ops_configs)
@@ -317,11 +309,10 @@ def code_map(input_doc):
         )
 
         # Create the Code Map operation
-        compression_config = rewrite.deterministic_doc_compression_config
         code_map_op = {
-            "name": compression_config.name,
+            "name": rewrite.name,
             "type": "code_map",
-            "code": compression_config.code,
+            "code": rewrite.code,
         }
 
         # Insert the Code Map operation before the first target operation

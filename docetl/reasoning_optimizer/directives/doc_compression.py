@@ -51,12 +51,12 @@ class DocCompressionDirective(Directive):
               deadlines: "list[str]"
 
         Example InstantiateSchema (what the agent should output):
-        DocCompressionConfig(
-            name="extract_regulatory_content",
-            document_key="legal_document",
-            prompt="Extract the minimal content necessary spanning: sections defining new regulatory requirements, stakeholder obligations, compliance deadlines, implementation timelines, and enforcement mechanisms. Focus only on substantive regulatory changes and specific dates, not background or procedural text.",
-            model="gpt-4o-mini"
-        )
+        {
+            "name": "extract_regulatory_content",
+            "document_key": "legal_document",
+            "prompt": "Extract the minimal content necessary spanning: sections defining new regulatory requirements, stakeholder obligations, compliance deadlines, implementation timelines, and enforcement mechanisms. Focus only on substantive regulatory changes and specific dates, not background or procedural text.",
+            "model": "gpt-4o-mini"
+        }
         """
     )
 
@@ -122,7 +122,7 @@ class DocCompressionDirective(Directive):
             f"Target Operations:\n"
             f"{ops_str}\n\n"
             f"Directive: {self.name}\n"
-            f"Your task is to instantiate this directive by generating a DocCompressionConfig "
+            f"Your task is to instantiate this directive by specifying an Extract operation "
             f"that specifies how to compress the input document before processing.\n\n"
             f"The directive will insert an Extract operation that:\n"
             f"1. Takes a long document field from the input\n"
@@ -140,7 +140,7 @@ class DocCompressionDirective(Directive):
             f"that gets just those essential pieces while removing all irrelevant material.\n\n"
             f"Example:\n"
             f"{self.example}\n\n"
-            f"Please output only the InstantiateSchema (DocCompressionConfig object) "
+            f"Please output only the DocCompressionInstantiateSchema as JSON "
             f"that specifies how to apply this directive to the target operations."
         )
 
@@ -177,13 +177,7 @@ class DocCompressionDirective(Directive):
 
             try:
                 parsed_res = json.loads(resp.choices[0].message.content)
-                if "doc_compression_config" not in parsed_res:
-                    raise ValueError(
-                        "Response missing required key 'doc_compression_config'"
-                    )
-
-                config = parsed_res["doc_compression_config"]
-                schema = DocCompressionInstantiateSchema(doc_compression_config=config)
+                schema = DocCompressionInstantiateSchema(**parsed_res)
                 message_history.append(
                     {"role": "assistant", "content": resp.choices[0].message.content}
                 )
@@ -214,13 +208,13 @@ class DocCompressionDirective(Directive):
         )
 
         # Create the Extract operation
-        compression_config = rewrite.doc_compression_config
         extract_op = {
-            "name": compression_config.name,
+            "name": rewrite.name,
             "type": "extract",
-            "prompt": compression_config.prompt,
-            "document_keys": [compression_config.document_key],
-            "model": compression_config.model,
+            "prompt": rewrite.prompt,
+            "document_keys": [rewrite.document_key],
+            "litellm_completion_kwargs": {"temperature": 0},
+            "model": rewrite.model,
         }
 
         # Insert the Extract operation before the first target operation

@@ -7,10 +7,7 @@ from typing import Dict, List, Type
 from litellm import completion
 from pydantic import BaseModel, Field
 
-from docetl.reasoning_optimizer.instantiate_schemas import (
-    ChangeModelConfig,
-    ChangeModelInstantiateSchema,
-)
+from docetl.reasoning_optimizer.instantiate_schemas import ChangeModelInstantiateSchema
 
 from .base import (
     AVAILABLE_MODELS,
@@ -31,7 +28,7 @@ class ChangeModelDirective(Directive):
     when_to_use: str = Field(
         default="When a specific step in the pipeline would benefit from a different model (e.g., for cost, speed, or accuracy reasons), but all other config stays the same."
     )
-    instantiate_schema_type: Type[BaseModel] = ChangeModelConfig
+    instantiate_schema_type: Type[BaseModel] = ChangeModelInstantiateSchema
 
     example: str = Field(
         default=(
@@ -48,11 +45,9 @@ class ChangeModelDirective(Directive):
             "  model: gpt-4o\n"
             "\n"
             "Example InstantiateSchema:\n"
-            "[\n"
-            "  ChangeModelConfig(\n"
-            "    model='gpt-4o-mini'\n"
-            "  ),\n"
-            "]"
+            "{\n"
+            '  "model": "gpt-4o-mini"\n'
+            "}"
         ),
     )
 
@@ -157,14 +152,14 @@ class ChangeModelDirective(Directive):
             f"Original Operation:\n"
             f"{str(original_op)}\n\n"
             f"Directive: {self.name}\n"
-            f"Your task is to instantiate this directive by generating a ChangeModelConfig that suggests a better model for executing the original operation."
+            f"Your task is to instantiate this directive by suggesting a better model for executing the original operation."
             f"You have a list of allowed models to choose from: {str(self.allowed_model_list)}.\n\n"
             f"Consider the information about the allowed models: \n {self.model_info}\n"
-            f"The ChangeModelConfig should include the new model choice for the operation."
+            f"Your response should include the new model choice for the operation."
             f"Ensure that your chosen model is in the list of allowed models."
             f"Example:\n"
             f"{self.example}\n\n"
-            f"Please output only the InstantiateSchema (a list of ChangeModelConfig object)."
+            f"Please output only the ChangeModelInstantiateSchema as JSON."
         )
 
     def llm_instantiate(
@@ -207,18 +202,11 @@ class ChangeModelDirective(Directive):
             )
             try:
                 parsed_res = json.loads(resp.choices[0].message.content)
-                if "change_model_config" not in parsed_res:
-                    raise ValueError(
-                        "Response from LLM is missing required key 'change_model_config'"
-                    )
-                change_model_config = parsed_res["change_model_config"]
-                schema = ChangeModelInstantiateSchema(
-                    change_model_config=change_model_config
-                )
+                schema = ChangeModelInstantiateSchema(**parsed_res)
 
                 # Validate the model is in the allowed model list
                 ChangeModelInstantiateSchema.validate_model_in_list(
-                    change_model_config=schema.change_model_config,
+                    model=schema.model,
                     list_of_model=self.allowed_model_list,
                 )
                 message_history.append(
@@ -252,7 +240,7 @@ class ChangeModelDirective(Directive):
 
         # Add change model configuration to the target operator
         target_operator = new_ops_list[pos_to_replace]
-        target_operator["model"] = rewrite.change_model_config.model
+        target_operator["model"] = rewrite.model
 
         return new_ops_list
 

@@ -232,6 +232,7 @@ class ChainingDirective(Directive):
                         "type": "map",
                         "prompt": op.prompt,
                         "model": op.model,
+                        "litellm_completion_kwargs": {"temperature": 0},
                         "output": {"schema": {key: "string" for key in op.output_keys}},
                     }
                 )
@@ -243,6 +244,7 @@ class ChainingDirective(Directive):
                         "type": "map",
                         "prompt": op.prompt,
                         "model": op.model,
+                        "litellm_completion_kwargs": {"temperature": 0},
                         "output": new_ops_list[pos_to_replace]["output"],
                     }
                 )

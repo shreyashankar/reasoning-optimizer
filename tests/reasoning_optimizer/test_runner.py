@@ -11,12 +11,14 @@ from datetime import datetime
 
 from docetl.reasoning_optimizer.directives import (
     ChainingDirective, 
-    GleaningDirective, 
+    GleaningDirective,
+    ReduceGleaningDirective,
     ChangeModelDirective,
     DocSummarizationDirective,
     IsolatingSubtasksDirective,
     DocCompressionDirective,
     DeterministicDocCompressionDirective,
+    OperatorFusionDirective,
     TestResult
 )
 
@@ -40,12 +42,14 @@ def run_all_directive_tests(agent_llm: str = "gpt-4.1") -> Dict[str, List[TestRe
     # Initialize all directives
     directives = [
         ChainingDirective(),
-        GleaningDirective(), 
+        GleaningDirective(),
+        ReduceGleaningDirective(),
         ChangeModelDirective(),
         DocSummarizationDirective(),
         IsolatingSubtasksDirective(),
         DocCompressionDirective(),
-        DeterministicDocCompressionDirective()
+        DeterministicDocCompressionDirective(),
+        OperatorFusionDirective()
     ]
     
     all_results = {}
@@ -140,11 +144,13 @@ def run_specific_directive_test(directive_name: str, agent_llm: str = "gpt-4o-mi
     directive_map = {
         "chaining": ChainingDirective(),
         "gleaning": GleaningDirective(),
+        "reduce_gleaning": ReduceGleaningDirective(),
         "change_model": ChangeModelDirective(),
         "doc_summarization": DocSummarizationDirective(),
         "isolating_subtasks": IsolatingSubtasksDirective(),
         "doc_compression": DocCompressionDirective(),
-        "deterministic_doc_compression": DeterministicDocCompressionDirective()
+        "deterministic_doc_compression": DeterministicDocCompressionDirective(),
+        "operator_fusion": OperatorFusionDirective()
     }
     
     if directive_name.lower() not in directive_map:

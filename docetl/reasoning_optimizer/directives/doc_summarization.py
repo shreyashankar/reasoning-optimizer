@@ -66,14 +66,12 @@ class DocSummarizationDirective(Directive):
             "Problem: 50-page transcript with scheduling, insurance, small talk distracts from medical reasoning.\n"
             "\n"
             "Example InstantiateSchema:\n"
-            "[\n"
-            "  DocSummarizationConfig(\n"
-            "    name='extract_medical_essentials',\n"
-            "    document_key='transcript',\n"
-            "    prompt='Extract a summary of medical information from this consultation transcript for drug interaction analysis, side effect prediction, and monitoring plan creation. Include: all medications with dosages, patient complaints/symptoms, medical history, current conditions, patient demographics (age, weight), allergies, and any contraindications mentioned. Exclude scheduling, insurance, and casual conversation: {{ input.transcript }}',\n"
-            "    model='gpt-4o-mini'\n"
-            "  )\n"
-            "]\n"
+            "{\n"
+            "  \"name\": \"extract_medical_essentials\",\n"
+            "  \"document_key\": \"transcript\",\n"
+            "  \"prompt\": \"Extract a summary of medical information from this consultation transcript for drug interaction analysis, side effect prediction, and monitoring plan creation. Include: all medications with dosages, patient complaints/symptoms, medical history, current conditions, patient demographics (age, weight), allergies, and any contraindications mentioned. Exclude scheduling, insurance, and casual conversation: {{ input.transcript }}\",\n"
+            "  \"model\": \"gpt-4o-mini\"\n"
+            "}\n"
             "\n"
             "Result: All three reasoning operations work on focused medical facts, dramatically improving accuracy."
         """,
@@ -217,7 +215,7 @@ class DocSummarizationDirective(Directive):
             f"{str(operators)}\n\n"
             f"Target Operations (that will use summarized content): {target_ops}\n\n"
             f"Directive: {self.name}\n"
-            f"Your task is to instantiate this directive by generating a DocSummarizationConfig that adds a Map summarization operator "
+            f"Your task is to instantiate this directive by specifying a Map summarization operator "
             f"at the start of the pipeline.\n\n"
             f"Analysis steps:\n"
             f"1. Identify which input field contains long documents that could benefit from summarization\n"
@@ -229,7 +227,7 @@ class DocSummarizationDirective(Directive):
             f"The output will replace the original document field with the summarized version.\n\n"
             f"Example:\n"
             f"{self.example}\n\n"
-            f"Please output only the InstantiateSchema (a DocSummarizationConfig object)."
+            f"Please output only the DocSummarizationInstantiateSchema as JSON."
         )
 
     def llm_instantiate(
@@ -274,14 +272,7 @@ class DocSummarizationDirective(Directive):
 
             try:
                 parsed_res = json.loads(resp.choices[0].message.content)
-                if "doc_summarization_config" not in parsed_res:
-                    raise ValueError(
-                        "Response from LLM is missing required key 'doc_summarization_config'"
-                    )
-                doc_summarization_config = parsed_res["doc_summarization_config"]
-                schema = DocSummarizationInstantiateSchema(
-                    doc_summarization_config=doc_summarization_config
-                )
+                schema = DocSummarizationInstantiateSchema(**parsed_res)
                 message_history.append(
                     {"role": "assistant", "content": resp.choices[0].message.content}
                 )
@@ -308,13 +299,12 @@ class DocSummarizationDirective(Directive):
 
         # Create the summarization Map operator using the LLM-generated name
         summarization_op = {
-            "name": rewrite.doc_summarization_config.name,
+            "name": rewrite.name,
             "type": "map",
-            "prompt": rewrite.doc_summarization_config.prompt,
-            "model": rewrite.doc_summarization_config.model,
-            "output": {
-                "schema": {rewrite.doc_summarization_config.document_key: "string"}
-            },
+            "prompt": rewrite.prompt,
+            "model": rewrite.model,
+            "litellm_completion_kwargs": {"temperature": 0},
+            "output": {"schema": {rewrite.document_key: "string"}},
         }
 
         # Insert the summarization operator at the beginning of the pipeline

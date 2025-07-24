@@ -48,21 +48,21 @@ class IsolatingSubtasksDirective(Directive):
               termination_clauses: "string"
 
         Example InstantiateSchema (what the agent should output):
-        IsolatingSubtasksConfig(
-            subtasks=[
-                SubtaskConfig(
-                    name="Extract Basic Contract Info",
-                    prompt="Extract party names and agreement date from: {{ input.document }}",
-                    output_keys=["parties", "agreement_date"]
-                ),
-                SubtaskConfig(
-                    name="Extract Legal Terms",
-                    prompt="Extract governing law and termination clauses from: {{ input.document }}",
-                    output_keys=["governing_law", "termination_clauses"]
-                )
+        {
+            "subtasks": [
+                {
+                    "name": "Extract Basic Contract Info",
+                    "prompt": "Extract party names and agreement date from: {{ input.document }}",
+                    "output_keys": ["parties", "agreement_date"]
+                },
+                {
+                    "name": "Extract Legal Terms",
+                    "prompt": "Extract governing law and termination clauses from: {{ input.document }}",
+                    "output_keys": ["governing_law", "termination_clauses"]
+                }
             ],
-            aggregation_prompt="Combine the basic info {{ input.subtask_1_output }} with legal terms {{ input.subtask_2_output }} into the final contract summary."
-        )
+            "aggregation_prompt": "Combine the basic info {{ input.subtask_1_output }} with legal terms {{ input.subtask_2_output }} into the final contract summary."
+        }
         """
     )
 
@@ -214,7 +214,7 @@ class IsolatingSubtasksDirective(Directive):
             f"Output Keys: {original_output_keys}\n\n"
             f"This map operation is overloaded - either the prompt asks for many different things "
             f"OR it has {len(original_output_keys)} output fields to generate. "
-            f"Your task is to create an IsolatingSubtasksConfig with:\n\n"
+            f"Your task is to create an IsolatingSubtasksInstantiateSchema with:\n\n"
             f"1. **SUBTASKS**: Group the {len(original_output_keys)} output fields into 2-4 logical subtasks "
             f"where each subtask handles related fields that can be processed independently:\n"
             f"   - Each subtask needs a descriptive 'name'\n"
@@ -235,7 +235,7 @@ class IsolatingSubtasksDirective(Directive):
             f"- Subtask 1: Basic info (parties, dates) \n"
             f"- Subtask 2: Legal terms (governing law, clauses)\n"
             f"- Subtask 3: Commercial terms (pricing, commitments)\n\n"
-            f"Please output the IsolatingSubtasksConfig that transforms this overloaded operation."
+            f"Please output the IsolatingSubtasksInstantiateSchema as JSON that transforms this overloaded operation."
         )
 
     def llm_instantiate(
@@ -273,21 +273,11 @@ class IsolatingSubtasksDirective(Directive):
 
             try:
                 parsed_res = json.loads(resp.choices[0].message.content)
-                if "isolating_subtasks_config" not in parsed_res:
-                    raise ValueError(
-                        "Response missing required key 'isolating_subtasks_config'"
-                    )
-
-                config = parsed_res["isolating_subtasks_config"]
-                schema = IsolatingSubtasksInstantiateSchema(
-                    isolating_subtasks_config=config
-                )
+                schema = IsolatingSubtasksInstantiateSchema(**parsed_res)
 
                 # Use the schema's validation methods
-                schema.isolating_subtasks_config.validate_subtasks_coverage(
-                    original_output_keys
-                )
-                schema.isolating_subtasks_config.validate_aggregation_references_all_subtasks()
+                schema.validate_subtasks_coverage(original_output_keys)
+                schema.validate_aggregation_references_all_subtasks()
 
                 message_history.append(
                     {"role": "assistant", "content": resp.choices[0].message.content}
@@ -325,12 +315,11 @@ class IsolatingSubtasksDirective(Directive):
         if pos_to_replace is None:
             raise ValueError(f"Target operation '{target_op}' not found")
 
-        config = rewrite.isolating_subtasks_config
-
         # Create the parallel map operation
         parallel_map_op = {
             "name": f"{target_op}_parallel",
             "type": "parallel_map",
+            "litellm_completion_kwargs": {"temperature": 0},
             "prompts": [],
         }
 
@@ -343,7 +332,7 @@ class IsolatingSubtasksDirective(Directive):
         parallel_output_schema = {}
 
         # Add each subtask as a prompt in the parallel map
-        for i, subtask in enumerate(config.subtasks, 1):
+        for i, subtask in enumerate(rewrite.subtasks, 1):
             subtask_output_key = f"subtask_{i}_output"
 
             prompt_config = {
@@ -364,7 +353,7 @@ class IsolatingSubtasksDirective(Directive):
 
         # Check if aggregation is needed by comparing subtask output keys with original keys
         subtask_output_keys = set()
-        for subtask in config.subtasks:
+        for subtask in rewrite.subtasks:
             subtask_output_keys.update(subtask.output_keys)
 
         original_keys_set = set(original_op.get("output", {}).get("schema", {}).keys())
@@ -372,7 +361,7 @@ class IsolatingSubtasksDirective(Directive):
         # Check if aggregation is needed: either keys don't match OR aggregation_prompt is empty
         if (
             subtask_output_keys == original_keys_set
-            or not config.aggregation_prompt.strip()
+            or not rewrite.aggregation_prompt.strip()
         ):
             # Just return the parallel map - it already produces the right output
             parallel_map_op["output"] = original_op.get("output", {})
@@ -382,7 +371,8 @@ class IsolatingSubtasksDirective(Directive):
             aggregation_map_op = {
                 "name": f"{target_op}_aggregate",
                 "type": "map",
-                "prompt": config.aggregation_prompt,
+                "prompt": rewrite.aggregation_prompt,
+                "litellm_completion_kwargs": {"temperature": 0},
                 "output": original_op.get(
                     "output", {}
                 ),  # Same output schema as original

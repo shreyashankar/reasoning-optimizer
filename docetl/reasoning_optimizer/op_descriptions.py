@@ -529,3 +529,27 @@ op_code_map = Operator(
             }
     """,
 )
+
+op_code_filter = Operator(
+    name="Code Filter",
+    type_llm_or_not="not LLM-powered",
+    description="Filters documents based on custom Python logic. Uses a Python function that returns True to keep documents and False to filter them out. Useful for deterministic filtering based on calculations, regex patterns, or structured data conditions.",
+    when_to_use="Use when you need deterministic filtering logic that doesn't require LLM reasoning - like filtering based on numeric thresholds, text patterns, data completeness, or complex boolean conditions.",
+    required_parameters="""
+    name: Unique name for the operation
+    type: Must be "code_filter"
+    code: Python code defining a function named 'code_filter' that takes an input document and returns a boolean (True to keep, False to filter out). Must include all necessary imports within the function. Format: def code_filter(input_doc): ...""",
+    optional_parameters="""
+    concurrent_thread_count: Number of threads to use (default: number of logical CPU cores)""",
+    returns="Subset of input documents where the code_filter function returned True. Documents retain all original fields.",
+    minimal_example_configuration="""
+    name: filter_valid_scores
+    type: code_filter
+    code: |
+        def code_filter(input_doc):
+            score = input_doc.get('confidence_score', 0)
+            text_length = len(input_doc.get('content', ''))
+            # Keep documents with high confidence and sufficient content
+            return score >= 0.8 and text_length >= 100
+    """,
+)
