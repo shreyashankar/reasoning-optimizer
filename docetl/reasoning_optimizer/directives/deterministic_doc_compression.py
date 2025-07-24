@@ -12,6 +12,10 @@ from docetl.reasoning_optimizer.instantiate_schemas import (
 
 from .base import MAX_DIRECTIVE_INSTANTIATION_ATTEMPTS, Directive, DirectiveTestCase
 
+# TODO: For the agent instantiating the rewrite directive,
+# we might want to allow it to look at some example documents /
+# enough documents until it feels like it has a good understanding of the data.
+
 
 class DeterministicDocCompressionDirective(Directive):
     name: str = Field(
